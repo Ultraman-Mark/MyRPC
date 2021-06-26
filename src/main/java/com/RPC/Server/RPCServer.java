@@ -1,11 +1,14 @@
 package com.RPC.Server;
 
-import com.RPC.Pojo.User;
+import com.RPC.Client.RPCRequest;
+import com.RPC.Client.RPCResponse;
 import com.RPC.Server.Impl.UserServiceImpl;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.ServerSocket;
 import java.net.Socket;
 
@@ -15,20 +18,24 @@ public class RPCServer {
         try {
             ServerSocket serverSocket = new ServerSocket(8899);
             System.out.println("服务端启动");
+            // BIO的方式监听Socket
             while (true){
                 Socket socket = serverSocket.accept();
+                // 开启一个线程去处理
                 new Thread(()->{
                     try{
                         ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream());
                         ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
-                        //读取客户端ID
-                        Integer id = ois.readInt();
-                        User userByUserId = userService.getUserByUserId(id);
-                        //写入User对象给客户端
-                        oos.writeObject(userByUserId);
+                        // 读取客户端传过来的request
+                        RPCRequest request = (RPCRequest) ois.readObject();
+                        // 反射调用对应方法
+                        Method method = userService.getClass().getMethod(request.getMethodName(),request.getParamsTypes());
+                        Object invoke = method.invoke(userService,request.getParams());
+                        // 封装，写入response对象
+                        oos.writeObject(RPCResponse.success(invoke));
                         oos.flush();
                     }
-                    catch (IOException e){
+                    catch (IOException | ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException e){
                         e.printStackTrace();
                         System.out.println("从IO中读取数据错误");
                     }
